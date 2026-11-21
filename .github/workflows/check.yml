@@ -1,0 +1,27 @@
+name: DEMO regression
+on: [push, pull_request]
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: paypilot
+          POSTGRES_PASSWORD: demo_admin
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: pip install -r backend/requirements.lock
+      - run: psql -h 127.0.0.1 -p 55432 -U postgres -d paypilot -v ON_ERROR_STOP=1 -f infra/roles.sql
+        env: {PGPASSWORD: demo_admin}
+      - run: alembic -c backend/alembic.ini upgrade head
+      - run: python scripts/seed_payments.py
+      - run: ruff check backend tests evaluation scripts && ruff format --check backend tests evaluation scripts
+      - run: pytest -q
+      - run: npm ci --prefix frontend && npm --prefix frontend run build

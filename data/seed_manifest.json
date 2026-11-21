@@ -1,0 +1,27 @@
+{
+  "seed": 20261116,
+  "anchor_at_utc": "2026-11-16T10:00:00Z",
+  "dataset_version": "demo-v1",
+  "total_rows": 30000,
+  "golden_scope": {
+    "country_code": "DE",
+    "payment_method": "Klarna"
+  },
+  "golden_windows": {
+    "baseline": [
+      "2026-11-13T09:55:00+00:00",
+      "2026-11-15T09:55:00+00:00"
+    ],
+    "current": [
+      "2026-11-15T09:55:00+00:00",
+      "2026-11-16T09:55:00+00:00"
+    ]
+  },
+  "expected_metrics": {
+    "current_psr": 0.892,
+    "baseline_psr": 0.95,
+    "delta_pp": -5.8,
+    "android_timeout_share": 0.6
+  },
+  "sha256": "49da392d0a03398765d0daa04561509b4fca95dd82bcf87c3b5fc9ed1010675f"
+}

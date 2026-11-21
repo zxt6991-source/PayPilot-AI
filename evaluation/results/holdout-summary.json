@@ -1,0 +1,46 @@
+{
+  "split": "holdout",
+  "total": 20,
+  "passed": 20,
+  "categories": {
+    "指标查询": {
+      "passed": 4,
+      "total": 4
+    },
+    "异常诊断": {
+      "passed": 5,
+      "total": 5
+    },
+    "多维度比较": {
+      "passed": 4,
+      "total": 4
+    },
+    "知识问答": {
+      "passed": 3,
+      "total": 3
+    },
+    "数据缺失与歧义": {
+      "passed": 2,
+      "total": 2
+    },
+    "安全边界": {
+      "passed": 2,
+      "total": 2
+    }
+  },
+  "expected_state_matches": 20,
+  "latency_sample_size": 20,
+  "p95_seconds": 0.0364,
+  "multi_tool_p95_seconds": 0.072,
+  "multi_tool_count": 13,
+  "diagnosis_class_correct": 5,
+  "diagnosis_class_total": 5,
+  "model_id": "demo-rules-v1",
+  "workflow_version": "workflow-v0.4",
+  "prompt_version": "bounded-choices-v1",
+  "dataset_version": "demo-v1",
+  "kb_version": "kb-v1",
+  "generated_at": "2026-11-21T06:53:38.322364+00:00",
+  "dataset_sha256": "72899a55c0b012c71398c8a564f1069ee02a920fac3c32508cf59977cd224911",
+  "split_sha256": "50b06afa414f3f50f3df7a5e53c61b276adc43ce9cb7b48e56cb66d09e8bf03e"
+}

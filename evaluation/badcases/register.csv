@@ -1,0 +1,3 @@
+source,case,observed,change,verification
+RAG单测,分母,KB-003 的段落标题未参与匹配,v0.4 将段落标题纳入匹配,test_retrieval 与完整开发集回归
+Chrome E2E,筛选终端,精确标签定位超时,为选择框增加显式无障碍标签,筛选传递与刷新通过

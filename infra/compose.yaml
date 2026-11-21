@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: paypilot
+      POSTGRES_PASSWORD: demo_admin
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - demo_pg:/var/lib/postgresql/data
+      - ./roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d paypilot"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  init:
+    profiles: [demo]
+    build:
+      context: ..
+      dockerfile: infra/backend.Dockerfile
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:demo_admin@db:5432/paypilot
+    command: ["sh", "-ec", "alembic -c backend/alembic.ini upgrade head && python scripts/seed_payments.py"]
+  api:
+    profiles: [demo]
+    build:
+      context: ..
+      dockerfile: infra/backend.Dockerfile
+    depends_on:
+      init: {condition: service_completed_successfully}
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://app_user:demo_app@db:5432/paypilot
+      PAYMENT_READONLY_DATABASE_URL: postgresql+psycopg://metric_reader:demo_read@db:5432/paypilot
+      LLM_PROVIDER: ${LLM_PROVIDER:-rules}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL_ID: ${LLM_MODEL_ID:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+  web:
+    profiles: [demo]
+    build:
+      context: ..
+      dockerfile: infra/frontend.Dockerfile
+    depends_on:
+      api: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:5173:80"
+volumes:
+  demo_pg:
