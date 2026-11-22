@@ -4,6 +4,8 @@
 
 [60 秒演示脚本](portfolio/demo-script.md) · [产品案例](portfolio/PayPilot-AI.html) · [20 题冻结对照](evaluation/reports/real-model-v1.md) · [时间范围复测](evaluation/reports/period-v1.md) · [场景与 MVP 取舍](docs/product-opportunity.md)
 
+新增 40 道冻结题，规则通过 29 道，DeepSeek 通过 31 道。4 个脚本化浏览器会话完成了 20 项试用任务，其中 19 项达标。两种已知根因的注入与修复在 3 千、3 万、30 万笔交易上共运行了 180 次诊断。[逐项结果与复现命令](evaluation/reports/field-study-v2.md)
+
 ![德国 Klarna 合成支付数据的诊断报告](portfolio/assets/report.png)
 
 ## 一条命令启动完整演示

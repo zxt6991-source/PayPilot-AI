@@ -1,0 +1,50 @@
+{
+  "split": "custom",
+  "case_file": "field-holdout-v2.jsonl",
+  "provider": "rules",
+  "temperature": null,
+  "total": 40,
+  "passed": 29,
+  "categories": {
+    "交接查数": {
+      "passed": 5,
+      "total": 8
+    },
+    "筛选修正": {
+      "passed": 2,
+      "total": 6
+    },
+    "补充条件": {
+      "passed": 7,
+      "total": 8
+    },
+    "诊断与版本": {
+      "passed": 6,
+      "total": 6
+    },
+    "知识与空样本": {
+      "passed": 6,
+      "total": 6
+    },
+    "业务写入与合法查询": {
+      "passed": 3,
+      "total": 6
+    }
+  },
+  "expected_state_matches": 31,
+  "latency_sample_size": 40,
+  "p50_seconds": 0.01795,
+  "p95_seconds": 0.0556,
+  "multi_tool_p95_seconds": 0.125,
+  "multi_tool_count": 16,
+  "diagnosis_class_correct": 0,
+  "diagnosis_class_total": 0,
+  "model_id": "demo-rules-v1",
+  "workflow_version": "workflow-v0.4",
+  "prompt_version": "bounded-choices-v1",
+  "dataset_version": "demo-v1",
+  "kb_version": "kb-v1",
+  "generated_at": "2026-11-22T10:40:11.397292+00:00",
+  "dataset_sha256": "1a7bed56d6718e5a6c69815ae0755a2acb9e66a45218b1851102055c86fd6470",
+  "split_sha256": null
+}

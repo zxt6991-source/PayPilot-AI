@@ -38,3 +38,26 @@ def test_clarification_state_alone_cannot_pass():
     }
     checks = runner.score({"expected": expected}, run)
     assert checks["state"] and not checks["retained_filters"] and not checks["missing_fields"]
+
+
+def test_empty_scope_with_wrong_zero_denominator_is_rejected():
+    scope = ["SG", "Klarna", "30d", "Web"]
+    case = {"expected": {"state": "INSUFFICIENT_DATA", "empty_scope": scope}}
+    filters = dict(country_code="DE", payment_method="PayPal", period="30d", channel="Web")
+    result = {
+        "state": "INSUFFICIENT_DATA",
+        "report": None,
+        "evidence": [
+            {"source_key": "get_payment_metrics", "payload": {"valid_attempts": 0, "filters": filters}}
+        ],
+    }
+    checks = runner.score(case, result)
+    assert checks["empty_sample"] and not checks["empty_query_scope"]
+
+
+def test_two_versions_partition_the_android_denominator():
+    scope = ["DE", "Klarna", "24h", "Android"]
+    overall, _, _ = runner.oracle(scope)
+    by_version = [runner.oracle(scope, v) for v in ("2.4", "2.5")]
+    assert [m["valid_attempts"] for m, _, _ in by_version] == [505, 495]
+    assert sum(sum(errors.values()) for _, _, errors in by_version) == overall["failed_attempts"]

@@ -1,0 +1,8 @@
+{
+  "mode": "scripted-browser",
+  "provider": "rules",
+  "browser": "157.0.8103.79",
+  "actors": 4,
+  "total": 20,
+  "passed": 19
+}

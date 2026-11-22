@@ -24,7 +24,7 @@ from app.config import ANCHOR, LAG, RANKER, VERSION
 from app.main import app
 
 
-def oracle(scope):
+def oracle(scope, app_version=None):
     country, method, period, channel = scope
     span = timedelta(days={"24h": 1, "7d": 7, "30d": 30}[period])
     end = ANCHOR - LAG
@@ -34,12 +34,14 @@ def oracle(scope):
             return conn.execute(
                 text("""select channel,count(*) as n,count(*) filter(where status='SUCCESS') as s
                 from payment_attempts where country_code=:country and payment_method=:method
-                and channel=coalesce(:channel,channel) and finalized_at>=:start and finalized_at<:stop
+                and channel=coalesce(:channel,channel) and app_version=coalesce(:app_version,app_version)
+                and finalized_at>=:start and finalized_at<:stop
                 and status in ('SUCCESS','FAILED') and dataset_version=:version group by channel order by channel"""),
                 dict(
                     country=country,
                     method=method,
                     channel=channel,
+                    app_version=app_version,
                     start=start,
                     stop=stop,
                     version=VERSION,
@@ -52,12 +54,14 @@ def oracle(scope):
             conn.execute(
                 text("""select error_code,count(*) from payment_attempts where
              dataset_version=:version and country_code=:country and payment_method=:method and channel=:ch
-             and status='FAILED' and finalized_at>=:start and finalized_at<:end group by error_code"""),
+             and app_version=coalesce(:app_version,app_version) and status='FAILED'
+             and finalized_at>=:start and finalized_at<:end group by error_code"""),
                 dict(
                     version=VERSION,
                     country=country,
                     method=method,
                     ch=focus,
+                    app_version=app_version,
                     start=end - span,
                     end=end,
                 ),
@@ -102,8 +106,20 @@ def score(case, r):
         )
         checks["missing_fields"] = sorted(prompt.get("missing_fields", [])) == sorted(gold["missing_fields"])
         checks["paused_before_query"] = not r["tools"] and not report and r["state"] == "CLARIFYING"
+    scope_keys = ("country_code", "payment_method", "period", "channel")
+    if "empty_scope" in gold:
+        scope = gold["empty_scope"]
+        metrics, _, _ = oracle(scope)
+        payload = ev.get("get_payment_metrics", {}).get("payload", {})
+        checks["empty_sample"] = (
+            metrics["valid_attempts"] == payload.get("valid_attempts") == 0 and not report
+        )
+        checks["empty_query_scope"] = [payload.get("filters", {}).get(k) for k in scope_keys] == scope
+    if gold.get("no_document"):
+        kb = ev.get("search_payment_kb", {}).get("payload", {})
+        checks["no_document"] = kb.get("status") == "NO_EVIDENCE" and kb.get("hits") == [] and not report
     if "scope" in gold:
-        metrics, groups, errors = oracle(gold["scope"])
+        metrics, groups, errors = oracle(gold["scope"], gold.get("app_version"))
         observed = report.get("metrics") or {}
         for k, v in metrics.items():
             checks[k] = k in observed and (
@@ -112,9 +128,18 @@ def score(case, r):
                 and isinstance(observed[k], (float, int))
                 and abs(v - observed[k]) < 1e-8
             )
-        scope_keys = ("country_code", "payment_method", "period", "channel")
         checks["scope"] = [r["filters"].get(k) for k in scope_keys] == gold["scope"]
         checks["report_scope"] = [report.get("scope", {}).get(k) for k in scope_keys] == gold["scope"]
+        checks["app_version"] = (
+            r["filters"].get("app_version")
+            == report.get("scope", {}).get("app_version")
+            == gold.get("app_version")
+        )
+        if gold.get("release_ids") is not None:
+            rows = ev.get("get_release_changes", {}).get("payload", {}).get("rows")
+            checks["release_ids"] = (
+                rows is not None and sorted(x["release_id"] for x in rows) == gold["release_ids"]
+            )
         if case["category"] == "异常诊断":
             total = sum(errors.values())
             concentrated = total >= 30 and errors.get("redirect_timeout", 0) * 2 >= total
@@ -151,9 +176,9 @@ def score(case, r):
     return checks
 
 
-def execute(client, case):
+def run_question(client, question):
     start = time.monotonic()
-    response = client.post("/api/diagnoses", json={"question": case["input"]})
+    response = client.post("/api/diagnoses", json={"question": question})
     response.raise_for_status()
     ids = response.json()
     while time.monotonic() - start < 40:
@@ -167,9 +192,13 @@ def execute(client, case):
             "INSUFFICIENT_DATA",
             "CANCELLED",
         ):
-            break
+            return r, time.monotonic() - start
         time.sleep(0.015)
-    elapsed = time.monotonic() - start
+    raise TimeoutError("diagnosis did not settle")
+
+
+def execute(client, case):
+    r, elapsed = run_question(client, case["input"])
     checks = score(case, r)
     observed_usage = defaultdict(int)
     for event in r["events"]:

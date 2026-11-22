@@ -1,0 +1,27 @@
+{
+  "size": 30000,
+  "provider": "rules",
+  "repeats_per_arm_scenario": 5,
+  "changed": {
+    "injected": {
+      "DE/Android/2.5/redirect_timeout": 120,
+      "SG/Web/web/network_error": 120
+    },
+    "repaired": {
+      "DE/Android/2.5/SUCCESS": 120,
+      "SG/Web/web/SUCCESS": 120
+    }
+  },
+  "repaired_outcome_differences": 0,
+  "fixture": "component-study-v1",
+  "rollout_utc": "2026-11-15T21:55:00+00:00",
+  "completed": 60,
+  "total": 60,
+  "data_checks_passed": 60,
+  "p50_seconds": 0.060950000000000004,
+  "p95_seconds": 0.0658,
+  "postgres": [
+    16,
+    2
+  ]
+}
