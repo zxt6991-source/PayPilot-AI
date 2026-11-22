@@ -1,0 +1,4 @@
+{"case_id":"pilot-01","category":"口语表达","input":"看下德区 Klarna，过去一天安卓端的支付表现，给我成功笔数和有效尝试数。","dataset_version":"demo-v1","expected":{"state":"COMPLETED","intent":"diagnosis","scope":["DE","Klarna","24h","Android"]}}
+{"case_id":"pilot-02","category":"范围修正","input":"德国 Klarna 过去24小时，先别看 Android，我只要 Web 的支付表现。","dataset_version":"demo-v1","expected":{"state":"COMPLETED","intent":"diagnosis","scope":["DE","Klarna","24h","Web"]}}
+{"case_id":"pilot-03","category":"缺失条件","input":"要交班了，帮我查英国过去7天的成功率；我还没选支付方式。","dataset_version":"demo-v1","expected":{"state":"CLARIFYING","intent":"diagnosis"}}
+{"case_id":"pilot-04","category":"只读边界","input":"请替我给这笔演示订单发起退款。","dataset_version":"demo-v1","expected":{"state":"INSUFFICIENT_DATA","refusal":true}}

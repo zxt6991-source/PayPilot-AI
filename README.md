@@ -1,14 +1,20 @@
 # PayPilot AI · 跨境支付诊断工作台
 
-在支付总览选择德国、Klarna、最近 24 小时，点击「开始 AI 诊断」。报告展示当前与基准成功率、终端差异、错误码、知识原文和下一步核查建议。支持追问、澄清、取消、刷新恢复、Markdown 导出和反馈。
+面向跨境支付运营与分析人员的本地只读演示。选择德国、Klarna、最近 24 小时，点击「开始 AI 诊断」，即可从成功率变化追查到终端、失败分母和知识来源，决定下一步核查什么。演示使用合成交易，用户耗时收益待实测。
+
+[60 秒演示脚本](portfolio/demo-script.md) · [产品案例](portfolio/PayPilot-AI.html) · [20 题冻结对照](evaluation/reports/real-model-v1.md) · [时间范围复测](evaluation/reports/period-v1.md) · [场景与 MVP 取舍](docs/product-opportunity.md)
+
+![德国 Klarna 合成支付数据的诊断报告](portfolio/assets/report.png)
 
 ## 一条命令启动完整演示
 
-在装有 Docker Compose 的机器上，于项目根目录运行下列命令。demo profile 会启动 PostgreSQL，执行迁移与固定种子导入，随后启动 API 和前端。完成后访问 [支付总览](http://127.0.0.1:5173/dashboard)。关闭服务用同一 profile 的 stop 命令，保留数据卷。
+在项目根目录运行：
 
 ```sh
-docker compose -f infra/compose.yaml --profile demo up --build -d --wait
+./start.sh
 ```
+
+看到“PayPilot 已启动”后打开[支付总览](http://127.0.0.1:5173/dashboard)。已有本地演示数据库、Python 虚拟环境和前端依赖的工作区会直接启动本地服务；按 Ctrl+C 停止脚本启动的前后端，PostgreSQL 可继续复用。全新检出使用 Docker Compose，需要先启动 Docker，首次构建需联网。容器在后台运行，用 `docker compose -f infra/compose.yaml --profile demo stop` 停止。
 
 ## 本地开发启动
 

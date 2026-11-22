@@ -117,7 +117,7 @@ export type Run = {
   run_id: string;
   state: string;
   question: string;
-  filters: Scope;
+  filters: Omit<Scope, "period"> & { period?: string };
   reason: string | null;
   model_id: string;
   workflow_version: string;

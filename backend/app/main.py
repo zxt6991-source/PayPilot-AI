@@ -251,7 +251,14 @@ async def message(tid: str, body: Message, owner: Owner):
             conn.execute(
                 db.runs.update().where(db.runs.c.run_id == rid).values(filters=scope, question=question)
             )
-            transition(conn, r, "PARSING")
+            choice = intent.channel_request(body.question)
+            if choice is None and "channel" in body.filters.model_fields_set:
+                choice = body.filters.channel or "all"
+            period = intent.period_request(body.question)
+            if period is None and "period" in body.filters.model_fields_set:
+                period = body.filters.period
+            answers = {"channel_request": choice, "period_request": period}
+            transition(conn, r, "PARSING", **{key: value for key, value in answers.items() if value})
             state = "PARSING"
         elif r.state in TERMINAL:
             rid = uid("run")

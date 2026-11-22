@@ -26,14 +26,14 @@ def records(rid):
         return {row.source_key: row for row in conn.execute(q).mappings()}
 
 
-def advance(r, state, reason=None, **updates):
+def advance(r, state, reason=None, *, event_details=None, **updates):
     with db.writer.begin() as conn:
         locked = run(conn, r.run_id, True)
         if locked.state != r.state:
             raise InterruptedError()
         if updates:
             conn.execute(db.runs.update().where(db.runs.c.run_id == r.run_id).values(**updates))
-        transition(conn, locked, state, reason)
+        transition(conn, locked, state, reason, **(event_details or {}))
 
 
 def usage(r, counts):
@@ -72,16 +72,42 @@ async def node(r):
         scope = Filters.model_validate(
             {**scope, **parsed.model_dump(exclude={"intent"}, exclude_none=True)}
         ).model_dump(mode="json")
-        missing = [
-            label
-            for k, label in [("country_code", "地区"), ("payment_method", "支付方式")]
-            if not scope.get(k)
-        ]
-        state = "RETRIEVING" if parsed.intent == "knowledge" else "CLARIFYING" if missing else "QUERYING"
+        channel = intent.channel_request(r.question)
+        period = intent.period_request(r.question)
+        if r.step_count > 1:
+            # Replay partial answers in order. Each answer overrides only its own field.
+            with db.writer.connect() as conn:
+                replies = conn.scalars(
+                    select(db.events.c.payload)
+                    .where(db.events.c.run_id == r.run_id, db.events.c.event_type == "step.started")
+                    .order_by(db.events.c.sequence)
+                )
+                for reply in replies:
+                    channel = reply.get("channel_request", channel)
+                    period = reply.get("period_request", period)
+        if channel:
+            scope["channel"] = None if channel in ("clarify", "all") else channel
+        required = () if parsed.intent == "knowledge" else ("country_code", "payment_method")
+        missing = [key for key in required if not scope.get(key)]
+        if channel == "clarify":
+            missing.append("channel")
+        if period == "clarify":
+            missing.append("period")
+            scope.pop("period", None)
+        elif period and period != "clarify":
+            scope["period"] = period
+        state = "CLARIFYING" if missing else "RETRIEVING" if parsed.intent == "knowledge" else "QUERYING"
+        labels = {
+            "country_code": "地区",
+            "payment_method": "支付方式",
+            "channel": "要查询的单个终端（Android、Web 或 iOS）",
+            "period": "查询周期（最近 24 小时、7 天或 30 天）",
+        }
         advance(
             r,
             state,
-            "请补充" + "、".join(missing) if state == "CLARIFYING" else None,
+            "请补充" + "、".join(labels[key] for key in missing) if state == "CLARIFYING" else None,
+            event_details={"missing_fields": missing} if state == "CLARIFYING" else None,
             filters=scope,
             intent=parsed.intent,
         )

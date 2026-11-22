@@ -1,0 +1,38 @@
+{
+  "split": "custom",
+  "case_file": "period-dev-v1.jsonl",
+  "provider": "rules",
+  "temperature": null,
+  "total": 9,
+  "passed": 9,
+  "categories": {
+    "滚动时间": {
+      "passed": 4,
+      "total": 4
+    },
+    "未说明周期": {
+      "passed": 1,
+      "total": 1
+    },
+    "周期澄清": {
+      "passed": 4,
+      "total": 4
+    }
+  },
+  "expected_state_matches": 9,
+  "latency_sample_size": 9,
+  "p50_seconds": 0.0255,
+  "p95_seconds": 0.0377,
+  "multi_tool_p95_seconds": 0.0377,
+  "multi_tool_count": 5,
+  "diagnosis_class_correct": 0,
+  "diagnosis_class_total": 0,
+  "model_id": "demo-rules-v1",
+  "workflow_version": "workflow-v0.4",
+  "prompt_version": "bounded-choices-v1",
+  "dataset_version": "demo-v1",
+  "kb_version": "kb-v1",
+  "generated_at": "2026-11-21T13:32:48.132159+00:00",
+  "dataset_sha256": "d2c16f336c82a8988b0217d7724196f9c875870e546c8f91c42f925e52ead9ee",
+  "split_sha256": null
+}

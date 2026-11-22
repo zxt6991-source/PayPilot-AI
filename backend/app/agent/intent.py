@@ -9,6 +9,8 @@ from pydantic import ValidationError
 
 from app.schemas import Channel, Country, Method, Period, Strict
 
+from .period import period_request
+
 PROVIDER = os.getenv("LLM_PROVIDER") or "rules"
 DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions"
 MODEL = (
@@ -36,6 +38,7 @@ UNSAFE = re.compile(
 )
 COUNTRIES = {
     "德国": "DE",
+    "德区": "DE",
     "英国": "GB",
     "新加坡": "SG",
     "Germany": "DE",
@@ -62,6 +65,41 @@ class Draft(Strict):
     action: Literal["compare", "callback", "release"]
 
 
+CHANNEL_NAMES = {"android": "Android", "安卓": "Android", "web": "Web", "ios": "iOS"}
+CHANNEL_TOKEN = re.compile(r"(?<![a-z])(?:android|web|ios)(?![a-z])|安卓", re.I)
+EXCLUDE_BEFORE = re.compile(
+    r"(?:排除|除了?|别看|不(?:要看?|用看|含|包括|看|查|是)|exclude|excluding|except|not)\s*$", re.I
+)
+EXCLUDE_AFTER = re.compile(r"^\s*(?:端)?(?:以外|之外|除外|不看|不查)")
+SELECT_BEFORE = re.compile(r"(?:只[要看查选]|仅[看查选]|改[看查成]|而是|only)\s*$", re.I)
+
+
+def channel_request(question):
+    """Return one channel, all, clarify, or None when no channel scope is mentioned."""
+    included, excluded, selected = set(), set(), set()
+    for match in CHANNEL_TOKEN.finditer(question):
+        channel = CHANNEL_NAMES[match[0].lower()]
+        before, after = question[: match.start()], question[match.end() :]
+        if EXCLUDE_BEFORE.search(before) or EXCLUDE_AFTER.match(after):
+            excluded.add(channel)
+        else:
+            included.add(channel)
+            if SELECT_BEFORE.search(before):
+                selected.add(channel)
+    if excluded:
+        # A bare exclusion can denote several terminals. Require an explicit positive choice.
+        if len(selected) == 1 and included == selected and not selected & excluded:
+            return next(iter(selected))
+        return "clarify"
+    if len(included) == 1:
+        return next(iter(included))
+    if included:
+        return "clarify"
+    if re.search(r"全部终端|所有终端|不限终端|all channels", question, re.I):
+        return "all"
+    return None
+
+
 def parse_rules(question):
     text = question.lower()
     found = {}
@@ -71,17 +109,24 @@ def parse_rules(question):
     for name in ("Klarna", "Card", "PayPal"):
         if name.lower() in text or (name == "Card" and "信用卡" in text):
             found["payment_method"] = name
-    for name in ("Android", "Web", "iOS"):
-        if re.search(r"(?<![a-z])" + name + r"(?![a-z])", question, re.I):
-            found["channel"] = name
-    for pattern, value in [(r"24\s*(h|小时)", "24h"), (r"7\s*(d|天)", "7d"), (r"30\s*(d|天)", "30d")]:
-        if re.search(pattern, text):
-            found["period"] = value
+    channel = channel_request(question)
+    if channel in CHANNEL_NAMES.values():
+        found["channel"] = channel
+    period = period_request(question)
+    if period and period != "clarify":
+        found["period"] = period
     version = re.search(r"(?<!\d)(2\.[45])(?!\d)", question)
     if version:
         found["app_version"] = version[1]
     kind = "diagnosis"
-    if re.search("含义|定义|什么|知识|解释|如何计算|怎么计算|口径|文档|清单|meaning", text):
+    # “按这个口径汇总” requests data. An unqualified “PSR 口径” still asks for the definition.
+    scope_instruction = re.search(
+        r"口径\s*[,，、]?\s*(?:都|分别|各|再|来|帮我)*\s*(?:看|查|取数|算一下|复算|统计|汇总|分析|对比|核对|拉取)",
+        text,
+    )
+    if re.search("含义|定义|什么|知识|解释|如何计算|怎么计算|文档|清单|meaning", text) or (
+        "口径" in text and not scope_instruction
+    ):
         kind = "knowledge"
     elif re.search("版本|发布|sdk", text):
         kind = "release"

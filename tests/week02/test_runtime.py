@@ -66,6 +66,36 @@ def test_clarification_and_followup(client):
     assert client.post(path, json={"run_id": r["run_id"], "question": "旧请求"}).status_code == 409
 
 
+def test_exclusion_clarifies_before_query_and_resumes_same_scope(client):
+    tid = start(client, "分析德国最近7天，排除安卓")["task_id"]
+    r = wait_run(client, tid)
+    assert r["state"] == "CLARIFYING" and not r["tools"]
+    assert r["events"][-1]["payload"]["missing_fields"] == ["payment_method", "channel"]
+    path = f"/api/diagnoses/{tid}/messages"
+    rid = r["run_id"]
+    assert client.post(path, json={"run_id": rid, "question": "Web"}).status_code == 202
+    r = wait_run(client, tid)
+    assert r["events"][-1]["payload"]["missing_fields"] == ["payment_method"]
+    assert r["filters"]["channel"] == "Web" and not r["tools"]
+    assert client.post(path, json={"run_id": rid, "question": "Klarna"}).status_code == 202
+    done = wait_run(client, tid)
+    assert done["state"] == "COMPLETED" and done["run_id"] == rid
+    scope = done["report"]["scope"]
+    assert [scope[k] for k in ("country_code", "payment_method", "period", "channel")] == [
+        "DE",
+        "Klarna",
+        "7d",
+        "Web",
+    ]
+    assert (
+        done["report"]["metrics"]["valid_attempts"]
+        == client.get(
+            "/api/metrics",
+            params={k: scope[k] for k in ("country_code", "payment_method", "period", "channel")},
+        ).json()["valid_attempts"]
+    )
+
+
 @pytest.mark.parametrize(
     "question,intent,state",
     [
@@ -81,6 +111,79 @@ def test_edges(client, question, intent, state):
     assert (r["intent"], r["state"]) == (intent, state)
     if intent == "refuse":
         assert not r["tools"] and not r["evidence"]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"question": "换成最近七天"},
+        {"question": "按所选的周期查", "filters": {"period": "7d"}},
+    ],
+)
+def test_period_clarification_resumes_after_partial_answers(client, reply):
+    from datetime import datetime, timedelta
+
+    tid = start(client, "英国 Web 最近17天的成功率")["task_id"]
+    r = wait_run(client, tid)
+    assert r["state"] == "CLARIFYING" and not r["tools"] and "period" not in r["filters"]
+    assert r["events"][-1]["payload"]["missing_fields"] == ["payment_method", "period"]
+    path = f"/api/diagnoses/{tid}/messages"
+    rid = r["run_id"]
+    assert client.post(path, json={"run_id": rid, **reply}).status_code == 202
+    partial = wait_run(client, tid)
+    assert partial["state"] == "CLARIFYING" and not partial["tools"]
+    assert partial["filters"]["period"] == "7d"
+    assert partial["events"][-1]["payload"]["missing_fields"] == ["payment_method"]
+    assert client.post(path, json={"run_id": rid, "question": "Card"}).status_code == 202
+    done = wait_run(client, tid)
+    assert done["run_id"] == rid and done["state"] == "COMPLETED"
+    assert done["report"]["scope"]["period"] == "7d"
+    evidence = next(e["payload"] for e in done["evidence"] if e["source_key"] == "get_payment_metrics")
+    window = evidence["query_window"]
+    assert datetime.fromisoformat(window["end_at"]) - datetime.fromisoformat(window["start_at"]) == timedelta(
+        days=7
+    )
+    assert evidence["valid_attempts"] == done["report"]["metrics"]["valid_attempts"]
+
+
+def test_explicit_unsupported_period_overrides_a_provider_guess(client, monkeypatch):
+    from app.agent import intent
+
+    async def guess_period(question, filters):
+        return intent.Intent(intent="diagnosis", period="24h", country_code="GB", payment_method="Card"), {}
+
+    monkeypatch.setattr(intent, "parse", guess_period)
+    run = wait_run(client, start(client, "英国 Card 最近 27 天")["task_id"])
+    assert run["state"] == "CLARIFYING" and not run["tools"] and "period" not in run["filters"]
+
+
+def test_period_wording_resumes_diagnosis_instead_of_kb_lookup(client):
+    tid = start(client, "新加坡 Card 的 Web 支付，7 天和 30 天两个口径分别统计。")["task_id"]
+    first = wait_run(client, tid)
+    assert first["state"] == "CLARIFYING" and first["intent"] == "diagnosis"
+    assert first["events"][-1]["payload"]["missing_fields"] == ["period"] and not first["tools"]
+    reply = client.post(
+        f"/api/diagnoses/{tid}/messages", json={"run_id": first["run_id"], "question": "取7天"}
+    )
+    assert reply.status_code == 202
+    done = wait_run(client, tid)
+    assert (
+        done["run_id"] == first["run_id"] and done["intent"] == "diagnosis" and done["state"] == "COMPLETED"
+    )
+    assert done["report"]["scope"]["period"] == "7d"
+    expected = client.get(
+        "/api/metrics",
+        params={"country_code": "SG", "payment_method": "Card", "channel": "Web", "period": "7d"},
+    ).json()
+    assert done["report"]["metrics"]["valid_attempts"] == expected["valid_attempts"] > 0
+
+
+def test_definition_request_with_scope_wording_stays_knowledge(client):
+    done = wait_run(
+        client, start(client, "解释 PSR 分母的口径，按这个口径统计时包括 PENDING 吗？")["task_id"]
+    )
+    assert done["state"] == "COMPLETED" and done["intent"] == "knowledge"
+    assert done["report"]["metrics"] is None and done["report"]["citations"]
 
 
 def test_idempotency(client):

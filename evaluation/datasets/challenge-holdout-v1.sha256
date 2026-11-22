@@ -1,0 +1,5 @@
+6cd3989dee08a957a4e36a5063fbb6a0eae269a9bab0ca228c4c421a781dad40  evaluation/datasets/challenge-holdout-v1.jsonl
+1ec2af8dd06c3e5a5f1972515887c53b1caabc03a9ccfbbb6249fa3fccc75215  backend/app/agent/intent.py
+e33695fa4d2e225ddb0f9b1534fbc56610cbd5637c363bb44c61143632ae2f9f  backend/app/agent/runtime.py
+f8eb329dd1992c5ee2808cb0555aa3bdc40d319bc83bf3a68aea268494c8bb46  backend/app/main.py
+2cd724093740875407ac58385be8bc9c6b37098bc1ad378b469f69732cdd5cfe  evaluation/runner.py

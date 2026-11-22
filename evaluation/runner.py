@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import json
 import math
+import statistics
 import sys
+import tempfile
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -16,7 +18,7 @@ from sqlalchemy import text
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE.parent / "backend"))
 from app import db
-from app.agent.intent import MODEL, PROMPT_VERSION
+from app.agent.intent import MODEL, PROMPT_VERSION, PROVIDER
 from app.agent.store import FLOW
 from app.config import ANCHOR, LAG, RANKER, VERSION
 from app.main import app
@@ -89,6 +91,17 @@ def score(case, r):
         checks["intent"] = r["intent"] == gold["intent"]
     if gold.get("refusal"):
         checks["readonly_refusal"] = r["intent"] == "refuse" and not r["tools"]
+    if "retained_filters" in gold:
+        checks["retained_filters"] = all(
+            key in r["filters"] and r["filters"][key] == value
+            for key, value in gold["retained_filters"].items()
+        )
+    if "missing_fields" in gold:
+        prompt = next(
+            (e["payload"] for e in reversed(r["events"]) if e["event_type"] == "clarification.required"), {}
+        )
+        checks["missing_fields"] = sorted(prompt.get("missing_fields", [])) == sorted(gold["missing_fields"])
+        checks["paused_before_query"] = not r["tools"] and not report and r["state"] == "CLARIFYING"
     if "scope" in gold:
         metrics, groups, errors = oracle(gold["scope"])
         observed = report.get("metrics") or {}
@@ -99,9 +112,9 @@ def score(case, r):
                 and isinstance(observed[k], (float, int))
                 and abs(v - observed[k]) < 1e-8
             )
-        checks["scope"] = [
-            r["filters"].get(k) for k in ("country_code", "payment_method", "period", "channel")
-        ] == gold["scope"]
+        scope_keys = ("country_code", "payment_method", "period", "channel")
+        checks["scope"] = [r["filters"].get(k) for k in scope_keys] == gold["scope"]
+        checks["report_scope"] = [report.get("scope", {}).get(k) for k in scope_keys] == gold["scope"]
         if case["category"] == "异常诊断":
             total = sum(errors.values())
             concentrated = total >= 30 and errors.get("redirect_timeout", 0) * 2 >= total
@@ -158,12 +171,22 @@ def execute(client, case):
         time.sleep(0.015)
     elapsed = time.monotonic() - start
     checks = score(case, r)
+    observed_usage = defaultdict(int)
+    for event in r["events"]:
+        if event["event_type"] == "model.usage":
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                if key in event["payload"]:
+                    observed_usage[key] += event["payload"][key]
     return dict(
         case_id=case["case_id"],
         category=case["category"],
         task_id=r["task_id"],
         run_id=r["run_id"],
         state=r["state"],
+        reason=r.get("reason"),
+        observed_intent=r["intent"],
+        observed_filters=r["filters"],
+        observed_usage=dict(observed_usage) or None,
         passed=all(checks.values()),
         checks=checks,
         seconds=round(elapsed, 4),
@@ -183,18 +206,38 @@ def execute(client, case):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", choices=["dev", "holdout"], default="dev")
+    parser.add_argument("--split", choices=["dev", "holdout"], help="固定回归集切分，默认 dev")
+    parser.add_argument("--dataset", type=Path, help="评估指定独立 JSONL 文件中的所有题目")
     args = parser.parse_args()
+    if args.dataset and args.split:
+        parser.error("--dataset evaluates the entire file; use --split only with the fixed regression set")
+    split_name = args.split or ("custom" if args.dataset else "dev")
     if args.split == "holdout" and RANKER != "v0.4":
         parser.error("holdout is reserved for the frozen candidate")
-    path = BASE / "datasets/cases_v1.jsonl"
+    path = args.dataset or BASE / "datasets/cases_v1.jsonl"
     split = BASE / "datasets/splits_v1.json"
-    ids = json.loads(split.read_text())[args.split]
-    cases = [json.loads(line) for line in path.read_text().splitlines()]
-    cases = [c for c in cases if c["case_id"] in ids]
+    dataset_bytes = path.read_bytes()
+    cases = [json.loads(line) for line in dataset_bytes.splitlines() if line.strip()]
+    split_hash = None
+    if not args.dataset:
+        split_bytes = split.read_bytes()
+        ids = json.loads(split_bytes)[split_name]
+        cases = [c for c in cases if c["case_id"] in ids]
+        split_hash = hashlib.sha256(split_bytes).hexdigest()
+    if not cases or len({c["case_id"] for c in cases}) != len(cases):
+        parser.error("dataset must contain cases with unique IDs")
+    if any(c["dataset_version"] != VERSION for c in cases):
+        parser.error("case dataset_version must match the payment dataset")
+    out = BASE / "results"
+    if args.dataset or PROVIDER != "rules":
+        archives = out / "experiments"
+        archives.mkdir(parents=True, exist_ok=True)
+        out = Path(tempfile.mkdtemp(prefix=f"{PROVIDER}-{split_name}-", dir=archives))
+    prefix = ("baseline-" if RANKER == "v0.3" else "") + split_name
     results = []
     with TestClient(app) as client:
         for c in cases:
+            start = time.monotonic()
             try:
                 row = execute(client, c)
             except Exception as exc:
@@ -205,26 +248,30 @@ def main():
                     state="ERROR",
                     error=type(exc).__name__,
                     checks={"state": False},
-                    seconds=None,
+                    seconds=round(time.monotonic() - start, 4),
+                    observed_usage=None,
                 )
             results.append(row)
     durations = sorted(r["seconds"] for r in results if r["seconds"] is not None)
     multi_tool = sorted(
         r["seconds"] for r in results if r["state"] == "COMPLETED" and len(r.get("evidence_ids", [])) > 1
     )
-    prefix = ("baseline-" if RANKER == "v0.3" else "") + args.split
     categories = defaultdict(lambda: dict(passed=0, total=0))
     for r in results:
         group = categories[r["category"]]
         group["total"] += 1
         group["passed"] += r["passed"]
     meta = dict(
-        split=args.split,
+        split=split_name,
+        case_file=path.name,
+        provider=PROVIDER,
+        temperature=None if PROVIDER == "rules" else 0,
         total=len(results),
         passed=sum(r["passed"] for r in results),
         categories=dict(categories),
         expected_state_matches=sum(r["checks"]["state"] for r in results),
         latency_sample_size=len(durations),
+        p50_seconds=statistics.median(durations),
         p95_seconds=durations[math.ceil(0.95 * len(durations)) - 1] if durations else None,
         multi_tool_p95_seconds=multi_tool[math.ceil(0.95 * len(multi_tool)) - 1] if multi_tool else None,
         multi_tool_count=len(multi_tool),
@@ -236,15 +283,14 @@ def main():
         dataset_version=VERSION,
         kb_version="kb-v1",
         generated_at=datetime.now(timezone.utc).isoformat(),
-        dataset_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-        split_sha256=hashlib.sha256(split.read_bytes()).hexdigest(),
+        dataset_sha256=hashlib.sha256(dataset_bytes).hexdigest(),
+        split_sha256=split_hash,
     )
-    out = BASE / "results"
     (out / (prefix + ".jsonl")).write_text(
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in results)
     )
     (out / (prefix + "-summary.json")).write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
-    print(f"{prefix}: {meta['passed']}/{meta['total']}; P95 {meta['p95_seconds']}s")
+    print(f"{out / prefix}: {meta['passed']}/{meta['total']}; P95 {meta['p95_seconds']}s")
     return int(meta["passed"] != meta["total"])
 
 

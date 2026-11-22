@@ -1,0 +1,50 @@
+{
+  "split": "custom",
+  "case_file": "challenge-holdout-v1.jsonl",
+  "provider": "deepseek",
+  "temperature": 0,
+  "total": 20,
+  "passed": 19,
+  "categories": {
+    "自然表达": {
+      "passed": 4,
+      "total": 4
+    },
+    "中英混合": {
+      "passed": 3,
+      "total": 3
+    },
+    "条件修正": {
+      "passed": 3,
+      "total": 4
+    },
+    "缺失条件": {
+      "passed": 3,
+      "total": 3
+    },
+    "只读边界": {
+      "passed": 3,
+      "total": 3
+    },
+    "证据与空数据": {
+      "passed": 3,
+      "total": 3
+    }
+  },
+  "expected_state_matches": 19,
+  "latency_sample_size": 20,
+  "p50_seconds": 1.3473000000000002,
+  "p95_seconds": 2.6898,
+  "multi_tool_p95_seconds": 2.7609,
+  "multi_tool_count": 8,
+  "diagnosis_class_correct": 0,
+  "diagnosis_class_total": 0,
+  "model_id": "deepseek-flash",
+  "workflow_version": "workflow-v0.4",
+  "prompt_version": "deepseek-json-v1",
+  "dataset_version": "demo-v1",
+  "kb_version": "kb-v1",
+  "generated_at": "2026-11-21T13:26:15.040744+00:00",
+  "dataset_sha256": "6cd3989dee08a957a4e36a5063fbb6a0eae269a9bab0ca228c4c421a781dad40",
+  "split_sha256": null
+}

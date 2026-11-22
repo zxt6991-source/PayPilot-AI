@@ -1,0 +1,42 @@
+{
+  "split": "custom",
+  "case_file": "pilot-dev-v1.jsonl",
+  "provider": "rules",
+  "temperature": null,
+  "total": 4,
+  "passed": 4,
+  "categories": {
+    "口语表达": {
+      "passed": 1,
+      "total": 1
+    },
+    "范围修正": {
+      "passed": 1,
+      "total": 1
+    },
+    "缺失条件": {
+      "passed": 1,
+      "total": 1
+    },
+    "只读边界": {
+      "passed": 1,
+      "total": 1
+    }
+  },
+  "expected_state_matches": 4,
+  "latency_sample_size": 4,
+  "p50_seconds": 0.02055,
+  "p95_seconds": 0.0406,
+  "multi_tool_p95_seconds": 0.0406,
+  "multi_tool_count": 2,
+  "diagnosis_class_correct": 0,
+  "diagnosis_class_total": 0,
+  "model_id": "demo-rules-v1",
+  "workflow_version": "workflow-v0.4",
+  "prompt_version": "bounded-choices-v1",
+  "dataset_version": "demo-v1",
+  "kb_version": "kb-v1",
+  "generated_at": "2026-11-21T13:06:58.006831+00:00",
+  "dataset_sha256": "d9259b6e59f9a4fdc476c9707492aba6a29f594d6ce4b7957db346580edf9ebf",
+  "split_sha256": null
+}
